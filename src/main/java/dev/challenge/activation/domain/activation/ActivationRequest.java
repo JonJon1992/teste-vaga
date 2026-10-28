@@ -1,8 +1,9 @@
-package dev.challenge.activation.domain;
+package dev.challenge.activation.domain.activation;
 
-import dev.challenge.activation.domain.ActivationOutcome.Activated;
-import dev.challenge.activation.domain.ActivationOutcome.Rejected;
-import dev.challenge.activation.domain.ActivationOutcome.TemporaryFailure;
+import dev.challenge.activation.domain.activation.ActivationOutcome.Activated;
+import dev.challenge.activation.domain.activation.ActivationOutcome.Rejected;
+import dev.challenge.activation.domain.activation.ActivationOutcome.TemporaryFailure;
+import dev.challenge.activation.domain.shared.Guard;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;

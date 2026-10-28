@@ -1,11 +1,11 @@
-package dev.challenge.activation.domain;
+package dev.challenge.activation.domain.shared;
 
-final class Guard {
+public final class Guard {
 
     private Guard() {
     }
 
-    static String notBlank(String value, String field) {
+    public static String notBlank(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + " é obrigatório");
         }

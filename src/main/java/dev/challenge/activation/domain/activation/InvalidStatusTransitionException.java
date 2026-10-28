@@ -1,4 +1,4 @@
-package dev.challenge.activation.domain;
+package dev.challenge.activation.domain.activation;
 
 import java.util.UUID;
 

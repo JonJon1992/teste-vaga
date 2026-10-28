@@ -1,4 +1,4 @@
-package dev.challenge.activation.domain;
+package dev.challenge.activation.domain.activation;
 
 public enum ActivationStatus {
     PENDING,

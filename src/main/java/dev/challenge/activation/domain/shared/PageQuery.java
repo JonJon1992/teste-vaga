@@ -1,4 +1,4 @@
-package dev.challenge.activation.domain;
+package dev.challenge.activation.domain.shared;
 
 public record PageQuery(int page, int size) {
 

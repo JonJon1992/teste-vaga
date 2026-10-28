@@ -1,4 +1,4 @@
-package dev.challenge.activation.domain;
+package dev.challenge.activation.domain.shared;
 
 import java.util.List;
 import java.util.function.Function;

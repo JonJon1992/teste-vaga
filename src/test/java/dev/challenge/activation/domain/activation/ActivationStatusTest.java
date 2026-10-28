@@ -1,4 +1,4 @@
-package dev.challenge.activation.domain;
+package dev.challenge.activation.domain.activation;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;

@@ -1,4 +1,7 @@
-package dev.challenge.activation.domain;
+package dev.challenge.activation.domain.activation;
+
+import dev.challenge.activation.domain.shared.PageQuery;
+import dev.challenge.activation.domain.shared.ResultPage;
 
 import java.time.Instant;
 import java.util.List;
