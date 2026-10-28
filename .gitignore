@@ -1,0 +1,9 @@
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Enunciado do desafio (não faz parte da solução)
+/Desafio*.html
