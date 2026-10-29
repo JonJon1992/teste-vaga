@@ -21,7 +21,8 @@ class SecurityConfiguration {
         SecurityProblemHandler problemHandler = new SecurityProblemHandler(objectMapper);
         return http
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/error", "/actuator/health/**").permitAll()
+                        .requestMatchers("/error", "/actuator/health/**", "/actuator/info", "/actuator/prometheus")
+                        .permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/requests").hasAuthority(WRITE_SCOPE)
                         .requestMatchers(HttpMethod.GET, "/api/v1/requests", "/api/v1/requests/*")
                         .hasAuthority(READ_SCOPE)

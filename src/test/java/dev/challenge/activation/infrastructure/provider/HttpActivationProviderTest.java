@@ -8,6 +8,7 @@ import dev.challenge.activation.domain.activation.ActivationOutcome.Activated;
 import dev.challenge.activation.domain.activation.ActivationOutcome.Rejected;
 import dev.challenge.activation.domain.activation.ActivationOutcome.TemporaryFailure;
 import dev.challenge.activation.domain.activation.ActivationRequest;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -47,6 +48,7 @@ class HttpActivationProviderTest {
     private final ActivationRequest request = ActivationRequest.register("system-a",
             new ActivationDetails("EXT-1", "CUST-1", "INTERNET-500"), "corr-12345678", NOW);
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private HttpActivationProvider activationProvider;
 
     @BeforeEach
@@ -54,7 +56,18 @@ class HttpActivationProviderTest {
         ProviderProperties properties = new ProviderProperties(
                 URI.create(provider.baseUrl()), Duration.ofSeconds(1), READ_TIMEOUT, "provider-token");
         RestClient restClient = new ProviderClientConfiguration().providerRestClient(RestClient.builder(), properties);
-        activationProvider = new HttpActivationProvider(restClient, Clock.fixed(NOW, ZoneOffset.UTC));
+        activationProvider = new HttpActivationProvider(restClient, Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
+    }
+
+    @Test
+    void countsOutcomesByType() {
+        provider.stubFor(post(ACTIVATE_PATH).willReturn(ok()));
+        activationProvider.activate(request);
+        provider.stubFor(post(ACTIVATE_PATH).willReturn(status(500)));
+        activationProvider.activate(request);
+
+        assertThat(outcomeCount("activated")).isEqualTo(1);
+        assertThat(outcomeCount("temporary_failure")).isEqualTo(1);
     }
 
     @Test
@@ -135,5 +148,9 @@ class HttpActivationProviderTest {
         ActivationOutcome outcome = activationProvider.activate(request);
 
         assertThat(outcome).isEqualTo(TemporaryFailure.of("Falha de comunicação com o provedor"));
+    }
+
+    private double outcomeCount(String outcome) {
+        return meterRegistry.counter(HttpActivationProvider.OUTCOME_METRIC, "outcome", outcome).count();
     }
 }

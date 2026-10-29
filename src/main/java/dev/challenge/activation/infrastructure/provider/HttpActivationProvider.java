@@ -6,6 +6,7 @@ import dev.challenge.activation.domain.activation.ActivationOutcome.Rejected;
 import dev.challenge.activation.domain.activation.ActivationOutcome.TemporaryFailure;
 import dev.challenge.activation.domain.activation.ActivationProvider;
 import dev.challenge.activation.domain.activation.ActivationRequest;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -31,20 +32,29 @@ class HttpActivationProvider implements ActivationProvider {
     static final String ACTIVATE_PATH = "/provider/v1/activate";
     static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
     static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
+    static final String OUTCOME_METRIC = "activation.provider.outcomes";
 
     private static final Logger log = LoggerFactory.getLogger(HttpActivationProvider.class);
     private static final int MAX_LOGGED_BODY_BYTES = 200;
 
     private final RestClient providerRestClient;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
 
-    HttpActivationProvider(RestClient providerRestClient, Clock clock) {
+    HttpActivationProvider(RestClient providerRestClient, Clock clock, MeterRegistry meterRegistry) {
         this.providerRestClient = providerRestClient;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
     public ActivationOutcome activate(ActivationRequest request) {
+        ActivationOutcome outcome = send(request);
+        meterRegistry.counter(OUTCOME_METRIC, "outcome", outcomeTag(outcome)).increment();
+        return outcome;
+    }
+
+    private ActivationOutcome send(ActivationRequest request) {
         try {
             return providerRestClient.post()
                     .uri(ACTIVATE_PATH)
@@ -78,6 +88,14 @@ class HttpActivationProvider implements ActivationProvider {
         }
         log.warn("Provedor rejeitou a solicitação {}: {}", request.getId(), bodyExcerpt(response));
         return new Rejected("Provedor rejeitou a ativação (HTTP %d)".formatted(status.value()));
+    }
+
+    private static String outcomeTag(ActivationOutcome outcome) {
+        return switch (outcome) {
+            case Activated activated -> "activated";
+            case Rejected rejected -> "rejected";
+            case TemporaryFailure temporaryFailure -> "temporary_failure";
+        };
     }
 
     private static boolean isThrottling(HttpStatusCode status) {

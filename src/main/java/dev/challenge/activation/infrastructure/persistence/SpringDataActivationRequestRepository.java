@@ -1,6 +1,7 @@
 package dev.challenge.activation.infrastructure.persistence;
 
 import dev.challenge.activation.domain.activation.ActivationRequest;
+import dev.challenge.activation.domain.activation.ActivationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +18,8 @@ interface SpringDataActivationRequestRepository
         extends JpaRepository<ActivationRequest, UUID>, JpaSpecificationExecutor<ActivationRequest> {
 
     Optional<ActivationRequest> findByClientIdAndExternalId(String clientId, String externalId);
+
+    long countByStatus(ActivationStatus status);
 
     @Transactional(propagation = Propagation.MANDATORY)
     @Query(value = """
