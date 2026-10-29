@@ -9,6 +9,8 @@ import dev.challenge.activation.domain.activation.ActivationRequest;
 import dev.challenge.activation.domain.activation.ActivationRequestRepository;
 import dev.challenge.activation.domain.activation.ActivationStatus;
 import dev.challenge.activation.domain.activation.RetryPolicy;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -46,12 +48,13 @@ class ActivationDispatcherTest {
     @Mock
     private ActivationProvider provider;
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private ActivationDispatcher dispatcher;
 
     @BeforeEach
     void setUp() {
         dispatcher = new ActivationDispatcher(repository, provider, RETRY_POLICY, new DispatchSettings(10, LEASE),
-                TransactionOperations.withoutTransaction(), Clock.fixed(NOW, ZoneOffset.UTC));
+                TransactionOperations.withoutTransaction(), Clock.fixed(NOW, ZoneOffset.UTC), meterRegistry);
     }
 
     @Nested
@@ -74,6 +77,7 @@ class ActivationDispatcherTest {
             assertThat(request.getStatus()).isEqualTo(ActivationStatus.COMPLETED);
             assertThat(request.getAttempts()).isEqualTo(1);
             verify(repository, times(2)).save(request);
+            assertThat(finishedCount("COMPLETED")).isEqualTo(1);
         }
 
         @Test
@@ -84,6 +88,7 @@ class ActivationDispatcherTest {
 
             assertThat(request.getStatus()).isEqualTo(ActivationStatus.FAILED);
             assertThat(request.getFailureReason()).isEqualTo("Provedor rejeitou a ativação (HTTP 400)");
+            assertThat(finishedCount("FAILED")).isEqualTo(1);
         }
 
         @Test
@@ -94,6 +99,7 @@ class ActivationDispatcherTest {
 
             assertThat(request.getStatus()).isEqualTo(ActivationStatus.PENDING);
             assertThat(request.getNextAttemptAt()).isEqualTo(NOW.plusSeconds(1));
+            assertThat(meterRegistry.find(ActivationDispatcher.FINISHED_METRIC).counters()).isEmpty();
         }
 
         @Test
@@ -114,6 +120,7 @@ class ActivationDispatcherTest {
                     .thenThrow(new OptimisticLockingFailureException("stale version"));
 
             assertThatNoException().isThrownBy(() -> dispatcher.dispatchDueRequests());
+            assertThat(finishedCount("COMPLETED")).isZero();
         }
     }
 
@@ -137,6 +144,28 @@ class ActivationDispatcherTest {
         assertThat(stuck.getStatus()).isEqualTo(ActivationStatus.PENDING);
         assertThat(stuck.getFailureReason()).contains("sem confirmação do provedor");
         verify(repository).save(stuck);
+        assertThat(meterRegistry.find(ActivationDispatcher.FINISHED_METRIC).counters()).isEmpty();
+    }
+
+    @Test
+    void countsARequestThatFailsWhenItsLastLeaseExpires() {
+        ActivationRequest stuck = pendingRequest();
+        stuck.startProcessing(LEASE, NOW.minus(LEASE));
+        stuck.applyOutcome(TemporaryFailure.of("HTTP 500"), RETRY_POLICY, NOW.minus(LEASE));
+        stuck.startProcessing(LEASE, NOW.minus(LEASE));
+        stuck.applyOutcome(TemporaryFailure.of("HTTP 500"), RETRY_POLICY, NOW.minus(LEASE));
+        stuck.startProcessing(LEASE, NOW.minus(LEASE));
+        when(repository.lockWithExpiredLease(NOW, 10)).thenReturn(List.of(stuck));
+
+        dispatcher.recoverExpiredLeases();
+
+        assertThat(stuck.getStatus()).isEqualTo(ActivationStatus.FAILED);
+        assertThat(finishedCount("FAILED")).isEqualTo(1);
+    }
+
+    private double finishedCount(String status) {
+        Counter counter = meterRegistry.find(ActivationDispatcher.FINISHED_METRIC).tag("status", status).counter();
+        return counter == null ? 0 : counter.count();
     }
 
     private static ActivationRequest pendingRequest() {

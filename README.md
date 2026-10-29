@@ -84,6 +84,11 @@ O provedor simulado responde `200` por padrão e simula falhas pelo `productCode
 Observabilidade local (porta de gerenciamento): `http://localhost:8081/actuator/health/readiness` e
 `http://localhost:8081/actuator/prometheus`.
 
+**Insomnia:** a coleção [`docs/insomnia-collection.json`](docs/insomnia-collection.json) traz todos os cenários
+acima, organizados por pasta: criação, consulta, segurança, falhas do provedor e o histórico de chamadas do WireMock.
+Para usar, vá em *Import* e escolha o arquivo. A autenticação OAuth 2.0 Client Credentials já vem configurada em cada
+requisição, e o token é obtido automaticamente.
+
 ### Rodando só a aplicação
 
 `./mvnw spring-boot:run` usa um PostgreSQL em `localhost:5432` e o servidor OAuth em `localhost:8090` (por exemplo,
@@ -170,6 +175,7 @@ Observabilidade local (porta de gerenciamento): `http://localhost:8081/actuator/
 | Consumidor acima do limite de requisições (com header `Retry-After`) | 429 | `too-many-requests` |
 | Banco indisponível | 503 | `service-unavailable` |
 | Erro inesperado (sem mensagem nem stack trace) | 500 | `internal-error` |
+| Falha na integração com o provedor | não gera erro HTTP | aparece no `status` e no `failureReason` da solicitação |
 
 ---
 
@@ -297,6 +303,18 @@ Todos os erros seguem Problem Details com `traceId` (tabela na seção [API](#ap
 mensagem de exceção interna, URL do provedor ou corpo da resposta dele; esses detalhes vão apenas para o log,
 correlacionados pelo `traceId`. O teste `returns500WithoutLeakingInternalDetails` garante isso.
 
+**Erro de integração.** A chamada ao provedor é assíncrona, então uma falha dele nunca vira erro HTTP para quem chamou
+o `POST`: a solicitação já foi aceita (`201`), e o desfecho aparece na consulta.
+
+| O que aconteceu no provedor | O que o consumidor vê no `GET` |
+|---|---|
+| Falha temporária (5xx, 429, timeout) com tentativas restantes | `status: PENDING`, `attempts` incrementado e `failureReason` com o último erro |
+| Rejeição (4xx) ou limite de tentativas atingido | `status: FAILED` e `failureReason`, por exemplo "Provedor rejeitou a ativação (HTTP 400)" |
+
+O `failureReason` é sempre genérico. URL do provedor, corpo da resposta e stack trace ficam só no log, com o mesmo
+`traceId` da requisição de criação, gravado na solicitação. Já a falha de uma dependência que a API usa de forma
+síncrona, o banco, responde `503` imediatamente.
+
 ### Segurança (item 7) — implementada
 
 - **OAuth 2.0 Client Credentials:** comunicação entre sistemas, sem usuário final.
@@ -361,7 +379,12 @@ banco, que não revela volume nem permite adivinhar ids vizinhos.
   - `http_server_requests`: latência da API por rota/status, com histograma para p95/p99;
   - `http_client_requests`: latência e taxa de erro do provedor, inclusive timeouts;
   - `activation_provider_outcomes_total{outcome}`: resultados (`activated`, `rejected`, `temporary_failure`);
-  - `activation_requests{status}`: backlog em `PENDING` e `PROCESSING`.
+  - `activation_requests{status}`: gauge com o backlog atual em `PENDING` e `PROCESSING`, consultado pelo índice
+    parcial;
+  - `activation_requests_finished_total{status}`: contador de solicitações finalizadas como `COMPLETED` ou `FAILED`,
+    incrementado pelo worker só depois que a transação confirma o novo status. Contar essas linhas no banco ficaria
+    mais caro à medida que a tabela cresce; com o contador, o Prometheus calcula vazão e taxa de falha
+    (`rate(...[5m])`).
 - **Logs:** `traceId` no MDC desde a requisição; o worker restaura o `traceId` gravado com a solicitação antes de
   chamar o provedor. Em JSON (ECS) com `LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`. Tokens, credenciais e corpos de
   requisição não são logados.
@@ -495,7 +518,6 @@ teste de carga e provedor simulado com 3 s de latência.
 ## Melhorias futuras
 
 - **Particionamento ou arquivamento** de solicitações finalizadas antigas, mantendo a tabela quente pequena.
-- **Contadores de transições finais** (`COMPLETED`/`FAILED`) emitidos pelo worker, complementando o backlog.
 - **Testes de contrato** com o provedor (Pact) e testes de carga (Gatling/k6) no pipeline.
 - **Qualidade no CI:** cobertura (JaCoCo) e testes de mutação (PIT).
 - **Imagem menor:** runtime com `jlink` e CDS/AOT cache para startup mais rápido.

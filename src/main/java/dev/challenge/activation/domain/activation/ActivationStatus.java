@@ -13,4 +13,8 @@ public enum ActivationStatus {
             case COMPLETED, FAILED -> false;
         };
     }
+
+    public boolean isFinal() {
+        return this == COMPLETED || this == FAILED;
+    }
 }
