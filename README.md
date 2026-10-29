@@ -505,15 +505,13 @@ teste de carga e provedor simulado com 3 s de latência.
 
 ## Uso de IA
 
-O desenvolvimento foi feito com o **Claude Code** (assistente de programação da Anthropic) como par:
-
+O desenvolvimento foi feito com o **Claude Code** como par:
 - **Leitura do enunciado** e divisão do trabalho em tarefas, uma por commit.
 - **Geração do código e dos testes** de cada tarefa, com o build rodando a cada passo.
 - **Diagnóstico de problemas encontrados no caminho:** a incompatibilidade de HTTP/2 (h2c) do cliente JDK com o
   WireMock e o bit de execução do `mvnw` no Git do Windows.
 - **Redação deste README e dos ADRs.**
 
-As decisões de organização do código foram tomadas e revisadas por mim, entre elas a separação do domínio em
-`domain.activation` e `domain.shared` e o padrão de código sem comentários. O ambiente com Docker Compose foi
-validado manualmente, com os cenários de criação, retry, conflito, validação, 401/403, isolamento entre consumidores
+As decisões de organização do código e arquitetura foram tomadas e revisadas por mim.
+O ambiente com Docker Compose foi validado manualmente, com os cenários de criação, retry, conflito, validação, 401/403, isolamento entre consumidores
 e falha no provedor.
