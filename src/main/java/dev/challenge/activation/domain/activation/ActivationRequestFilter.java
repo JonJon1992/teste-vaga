@@ -6,5 +6,8 @@ public record ActivationRequestFilter(String clientId, ActivationStatus status, 
 
     public ActivationRequestFilter {
         Guard.notBlank(clientId, "clientId");
+        if (customerId != null && customerId.isBlank()) {
+            customerId = null;
+        }
     }
 }
