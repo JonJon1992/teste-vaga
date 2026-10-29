@@ -119,9 +119,9 @@ Observabilidade local: `http://localhost:8080/actuator/health/readiness` e `http
 // POST /api/v1/requests
 { "externalId": "EXT-12345", "customerId": "CUST-10001", "productCode": "INTERNET-500" }
 
-// 201 Created — Location: /api/v1/requests/0b7f3c1e-5d2a-4c4e-9a51-2f8d7b1e6c90
+// 201 Created — Location: /api/v1/requests/01a17885-b590-7c4e-9a51-2f8d7b1e6c90
 {
-  "id": "0b7f3c1e-5d2a-4c4e-9a51-2f8d7b1e6c90",
+  "id": "01a17885-b590-7c4e-9a51-2f8d7b1e6c90",
   "externalId": "EXT-12345",
   "customerId": "CUST-10001",
   "productCode": "INTERNET-500",
@@ -183,7 +183,7 @@ src/main/java/dev/challenge/activation
 ├── domain
 │   ├── activation   ActivationRequest (agregado), ActivationStatus, RetryPolicy, ActivationOutcome (sealed),
 │   │                portas ActivationRequestRepository e ActivationProvider
-│   └── shared       PageQuery, ResultPage, Guard
+│   └── shared       PageQuery, ResultPage, Guard, UuidV7
 ├── application      CreateActivationRequestUseCase, ActivationRequestQueries, ActivationDispatcher
 ├── api              ActivationRequestController, DTOs (records), ApiExceptionHandler, SecurityConfiguration
 └── infrastructure
@@ -309,12 +309,27 @@ correlacionados pelo `traceId`. O teste `returns500WithoutLeakingInternalDetails
 
 | Índice | Uso | Justificativa |
 |---|---|---|
+| `pk (id)` — UUID v7 | `GET /{id}` e atualizações do worker | ids ordenados pelo tempo: cada insert vai para o fim do índice, sem fragmentar a árvore (ver abaixo) |
 | `uk (client_id, external_id)` | unicidade e busca do retry | garante a regra e serve a consulta mais frequente do `POST` |
 | `ix_due (status, next_attempt_at) WHERE status IN ('PENDING','PROCESSING')` | claim do worker, reconciliação e métrica de backlog | **parcial**: só cobre solicitações não finalizadas, então fica pequeno mesmo com milhões de `COMPLETED` |
 | `ix (client_id, status, created_at DESC)` | listagem filtrada por status | filtra e já entrega na ordem da paginação, sem sort |
 | `ix (client_id, customer_id, created_at DESC)` | listagem filtrada por cliente | idem; com os dois filtros o planner usa um e filtra o outro |
 
 `client_id` é sempre o primeiro campo porque toda consulta da API é restrita ao consumidor.
+
+**Ids com UUID v7 (RFC 9562).** Os primeiros 48 bits são o instante de criação em milissegundos; o restante é
+aleatório (74 bits, `SecureRandom`). Com UUID v4, totalmente aleatório, cada insert cai em uma página qualquer do
+índice da chave primária: mais page splits, índice fragmentado e páginas "frias" sendo lidas do disco. Com v7, os
+inserts são praticamente sequenciais, como em um `BIGSERIAL`, sem perder o que o UUID oferece: id gerado sem ida ao
+banco, que não revela volume nem permite adivinhar ids vizinhos.
+
+- O id é gerado **no domínio** (`UuidV7.generate(now)`, em `domain.shared`), com o mesmo instante do `createdAt`. A
+  identidade existe antes de persistir (necessária para a `Idempotency-Key`) e os testes continuam determinísticos com
+  `Clock` fixo.
+- A implementação é própria, com poucas linhas e testada (versão, variante, timestamp, ordenação e unicidade no mesmo
+  milissegundo), em vez de uma biblioteca só para isso.
+- O id expõe o instante de criação, o que não é problema aqui porque o `createdAt` já é público na API.
+- A coluna continua `UUID` no PostgreSQL, sem migração.
 
 ### Observabilidade
 
@@ -336,7 +351,7 @@ correlacionados pelo `traceId`. O teste `returns500WithoutLeakingInternalDetails
 
 | Nível | Classes | O que garante | Por quê nesse nível |
 |---|---|---|---|
-| Domínio (unitário, sem Spring) | `ActivationRequestTest`, `ActivationStatusTest`, `RetryPolicyTest` | transições válidas e inválidas, limite de tentativas, backoff e jitter | regras de negócio puras: rápidas e determinísticas (`Clock` e aleatoriedade injetados) |
+| Domínio (unitário, sem Spring) | `ActivationRequestTest`, `ActivationStatusTest`, `RetryPolicyTest`, `UuidV7Test` | transições válidas e inválidas, limite de tentativas, backoff e jitter, formato e ordenação dos ids | regras de negócio puras: rápidas e determinísticas (`Clock` e aleatoriedade injetados) |
 | Aplicação (unitário, Mockito) | `CreateActivationRequestUseCaseTest`, `ActivationRequestQueriesTest`, `ActivationDispatcherTest` | idempotência da criação, corrida simulada, isolamento, orquestração do worker | lógica de coordenação sem depender de banco ou HTTP |
 | Web (`@WebMvcTest`) | `ActivationRequestControllerTest`, `ApiSecurityTest` | contrato HTTP, validação, Problem Details, 401/403 | serialização, status e segurança exigem o MVC real, mas não o banco |
 | Persistência (Testcontainers) | `JpaActivationRequestRepositoryTest` | constraint única, `@Version`, filtros, `SKIP LOCKED` entre transações | comportamento de banco não se simula com H2 ou mock |
@@ -460,7 +475,6 @@ teste de carga e provedor simulado com 3 s de latência.
 
 ## Melhorias futuras
 
-- **UUID v7** nos ids, para inserções sequenciais no índice da chave primária.
 - **Particionamento ou arquivamento** de solicitações finalizadas antigas, mantendo a tabela quente pequena.
 - **Contadores de transições finais** (`COMPLETED`/`FAILED`) emitidos pelo worker, complementando o backlog.
 - **Testes de contrato** com o provedor (Pact) e testes de carga (Gatling/k6) no pipeline.

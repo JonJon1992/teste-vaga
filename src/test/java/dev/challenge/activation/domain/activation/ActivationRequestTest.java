@@ -28,6 +28,8 @@ class ActivationRequestTest {
         ActivationRequest request = ActivationRequest.register("system-a", DETAILS, "corr-1", NOW);
 
         assertThat(request.getId()).isNotNull();
+        assertThat(request.getId().version()).isEqualTo(7);
+        assertThat(request.getId().getMostSignificantBits() >>> 16).isEqualTo(NOW.toEpochMilli());
         assertThat(request.getStatus()).isEqualTo(ActivationStatus.PENDING);
         assertThat(request.details()).isEqualTo(DETAILS);
         assertThat(request.getAttempts()).isZero();

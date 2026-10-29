@@ -4,6 +4,7 @@ import dev.challenge.activation.domain.activation.ActivationOutcome.Activated;
 import dev.challenge.activation.domain.activation.ActivationOutcome.Rejected;
 import dev.challenge.activation.domain.activation.ActivationOutcome.TemporaryFailure;
 import dev.challenge.activation.domain.shared.Guard;
+import dev.challenge.activation.domain.shared.UuidV7;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -44,7 +45,7 @@ public class ActivationRequest {
     }
 
     private ActivationRequest(String clientId, ActivationDetails details, String correlationId, Instant now) {
-        this.id = UUID.randomUUID();
+        this.id = UuidV7.generate(now);
         this.clientId = Guard.notBlank(clientId, "clientId");
         this.externalId = details.externalId();
         this.customerId = details.customerId();
