@@ -400,6 +400,7 @@
         "grantType": "client_credentials",
         "accessTokenUrl": "{{ _.tokenUrl }}",
         "clientId": "reporting-system",
+        "scope": "activation:read",
         "clientSecret": "{{ _.clientSecret }}",
         "credentialsInBody": true
       },
@@ -418,6 +419,7 @@
         "grantType": "client_credentials",
         "accessTokenUrl": "{{ _.tokenUrl }}",
         "clientId": "reporting-system",
+        "scope": "activation:read",
         "clientSecret": "{{ _.clientSecret }}",
         "credentialsInBody": true
       },
