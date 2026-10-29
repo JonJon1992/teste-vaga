@@ -1,0 +1,604 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-10-29T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:v10.0.0",
+  "resources": [
+    {
+      "_id": "wrk_product_activation",
+      "_type": "workspace",
+      "parentId": null,
+      "name": "Product Activation Service",
+      "description": "Cenários da API de ativação contra o ambiente do docker compose (docker compose up -d --build). A autenticação usa OAuth2 Client Credentials no servidor simulado; o Insomnia obtém o token sozinho.",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_base",
+      "_type": "environment",
+      "parentId": "wrk_product_activation",
+      "name": "Base Environment",
+      "data": {
+        "baseUrl": "http://localhost:8080",
+        "managementUrl": "http://localhost:8081",
+        "tokenUrl": "http://localhost:8090/default/token",
+        "providerUrl": "http://localhost:8089",
+        "clientSecret": "secret",
+        "externalId": "EXT-INSOMNIA-1",
+        "customerId": "CUST-10001"
+      }
+    },
+
+    {
+      "_id": "fld_health",
+      "_type": "request_group",
+      "parentId": "wrk_product_activation",
+      "name": "0. Saúde e métricas (porta 8081)",
+      "metaSortKey": -1000
+    },
+    {
+      "_id": "req_liveness",
+      "_type": "request",
+      "parentId": "fld_health",
+      "name": "Liveness",
+      "description": "Esperado: 200 {\"status\":\"UP\"}",
+      "method": "GET",
+      "url": "{{ _.managementUrl }}/actuator/health/liveness",
+      "authentication": {},
+      "metaSortKey": -1000
+    },
+    {
+      "_id": "req_readiness",
+      "_type": "request",
+      "parentId": "fld_health",
+      "name": "Readiness (inclui banco)",
+      "description": "Esperado: 200 {\"status\":\"UP\"}",
+      "method": "GET",
+      "url": "{{ _.managementUrl }}/actuator/health/readiness",
+      "authentication": {},
+      "metaSortKey": -990
+    },
+    {
+      "_id": "req_prometheus",
+      "_type": "request",
+      "parentId": "fld_health",
+      "name": "Métricas Prometheus",
+      "description": "Procure por activation_requests, activation_provider_outcomes_total, http_server_requests e http_client_requests.",
+      "method": "GET",
+      "url": "{{ _.managementUrl }}/actuator/prometheus",
+      "authentication": {},
+      "metaSortKey": -980
+    },
+    {
+      "_id": "req_actuator_api_port",
+      "_type": "request",
+      "parentId": "fld_health",
+      "name": "Actuator na porta da API (404)",
+      "description": "Esperado: 404. Health e métricas só existem na porta de gerenciamento.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/actuator/prometheus",
+      "authentication": {},
+      "metaSortKey": -970
+    },
+
+    {
+      "_id": "fld_create",
+      "_type": "request_group",
+      "parentId": "wrk_product_activation",
+      "name": "1. Criação (source-system-a)",
+      "description": "Execute na ordem. Para criar uma solicitação nova, troque o externalId no environment.",
+      "metaSortKey": -900
+    },
+    {
+      "_id": "req_create",
+      "_type": "request",
+      "parentId": "fld_create",
+      "name": "Criar solicitação (201)",
+      "description": "Esperado: 201 Created, header Location e status PENDING. Se o externalId já existir, retorna 200 com o registro original.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"{{ _.externalId }}\",\n  \"customerId\": \"{{ _.customerId }}\",\n  \"productCode\": \"INTERNET-500\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "X-Correlation-Id", "value": "insomnia-{% uuid 'v4' %}" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -900
+    },
+    {
+      "_id": "req_retry",
+      "_type": "request",
+      "parentId": "fld_create",
+      "name": "Repetir a mesma solicitação (200)",
+      "description": "Esperado: 200 OK com o mesmo id da criação, sem header Location. É o retry legítimo do sistema de origem.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"{{ _.externalId }}\",\n  \"customerId\": \"{{ _.customerId }}\",\n  \"productCode\": \"INTERNET-500\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -890
+    },
+    {
+      "_id": "req_conflict",
+      "_type": "request",
+      "parentId": "fld_create",
+      "name": "Mesmo externalId com dados diferentes (409)",
+      "description": "Esperado: 409 Conflict em Problem Details (type external-id-conflict).",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"{{ _.externalId }}\",\n  \"customerId\": \"{{ _.customerId }}\",\n  \"productCode\": \"TV-HD\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -880
+    },
+    {
+      "_id": "req_invalid",
+      "_type": "request",
+      "parentId": "fld_create",
+      "name": "Dados inválidos (400)",
+      "description": "Esperado: 400 com a lista errors (externalId obrigatório, productCode com caractere inválido).",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"\",\n  \"customerId\": \"{{ _.customerId }}\",\n  \"productCode\": \"INTERNET 500\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -870
+    },
+    {
+      "_id": "req_malformed",
+      "_type": "request",
+      "parentId": "fld_create",
+      "name": "JSON malformado (400)",
+      "description": "Esperado: 400 com type malformed-request.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\"externalId\": "
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -860
+    },
+    {
+      "_id": "req_too_large",
+      "_type": "request",
+      "parentId": "fld_create",
+      "name": "Corpo maior que 16 KB (413)",
+      "description": "Esperado: 413 com type payload-too-large. O corpo tem cerca de 17 KB.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\"externalId\": \"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\", \"customerId\": \"CUST-1\", \"productCode\": \"INTERNET-500\"}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -850
+    },
+
+    {
+      "_id": "fld_query",
+      "_type": "request_group",
+      "parentId": "wrk_product_activation",
+      "name": "2. Consulta (source-system-a)",
+      "description": "As consultas por id usam o id retornado por \"Criar solicitação\". Execute a criação antes.",
+      "metaSortKey": -800
+    },
+    {
+      "_id": "req_find_by_id",
+      "_type": "request",
+      "parentId": "fld_query",
+      "name": "Consultar por id",
+      "description": "Esperado: 200. Cerca de 1 segundo após a criação o status passa a COMPLETED.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/api/v1/requests/{% response 'body', 'req_create', 'b64::JC5pZA==::46b', 'never', 60 %}",
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -800
+    },
+    {
+      "_id": "req_search",
+      "_type": "request",
+      "parentId": "fld_query",
+      "name": "Listar com filtros",
+      "description": "Esperado: 200 com content, page, size, totalElements e totalPages. Remova parâmetros para ampliar o filtro.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "parameters": [
+        { "name": "customerId", "value": "{{ _.customerId }}" },
+        { "name": "status", "value": "COMPLETED", "disabled": true },
+        { "name": "page", "value": "0" },
+        { "name": "size", "value": "20" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -790
+    },
+    {
+      "_id": "req_search_invalid_size",
+      "_type": "request",
+      "parentId": "fld_query",
+      "name": "Listar com size acima de 100 (400)",
+      "description": "Esperado: 400 com errors[0].field = size.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "parameters": [
+        { "name": "size", "value": "500" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -780
+    },
+    {
+      "_id": "req_find_invalid_uuid",
+      "_type": "request",
+      "parentId": "fld_query",
+      "name": "Id que não é UUID (400)",
+      "description": "Esperado: 400 com errors[0].field = id.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/api/v1/requests/nao-e-um-uuid",
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -770
+    },
+    {
+      "_id": "req_find_unknown",
+      "_type": "request",
+      "parentId": "fld_query",
+      "name": "Id inexistente (404)",
+      "description": "Esperado: 404 com type not-found.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/api/v1/requests/01a17885-b590-7c4e-9a51-2f8d7b1e6c90",
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -760
+    },
+
+    {
+      "_id": "fld_security",
+      "_type": "request_group",
+      "parentId": "wrk_product_activation",
+      "name": "3. Segurança",
+      "metaSortKey": -700
+    },
+    {
+      "_id": "req_no_token",
+      "_type": "request",
+      "parentId": "fld_security",
+      "name": "Sem token (401)",
+      "description": "Esperado: 401 com header WWW-Authenticate: Bearer e type unauthorized.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "authentication": {},
+      "metaSortKey": -700
+    },
+    {
+      "_id": "req_invalid_token",
+      "_type": "request",
+      "parentId": "fld_security",
+      "name": "Token inválido (401)",
+      "description": "Esperado: 401 com WWW-Authenticate contendo invalid_token.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "authentication": {
+        "type": "bearer",
+        "token": "token-invalido"
+      },
+      "metaSortKey": -690
+    },
+    {
+      "_id": "req_read_only_create",
+      "_type": "request",
+      "parentId": "fld_security",
+      "name": "Escopo só de leitura tentando criar (403)",
+      "description": "reporting-system tem apenas activation:read. Esperado: 403 com WWW-Authenticate contendo insufficient_scope.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"EXT-REPORTING-1\",\n  \"customerId\": \"{{ _.customerId }}\",\n  \"productCode\": \"INTERNET-500\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "reporting-system",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -680
+    },
+    {
+      "_id": "req_read_only_list",
+      "_type": "request",
+      "parentId": "fld_security",
+      "name": "Escopo só de leitura listando (200)",
+      "description": "reporting-system pode consultar, mas só enxerga as próprias solicitações: a lista vem vazia.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "reporting-system",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -670
+    },
+    {
+      "_id": "req_other_client",
+      "_type": "request",
+      "parentId": "fld_security",
+      "name": "Outro sistema consultando solicitação do A (404)",
+      "description": "source-system-b tenta ler a solicitação criada por source-system-a. Esperado: 404, sem confirmar que o id existe.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/api/v1/requests/{% response 'body', 'req_create', 'b64::JC5pZA==::46b', 'never', 60 %}",
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-b",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -660
+    },
+
+    {
+      "_id": "fld_provider_failures",
+      "_type": "request_group",
+      "parentId": "wrk_product_activation",
+      "name": "4. Falhas do provedor",
+      "description": "Cada requisição cria uma solicitação nova (externalId aleatório). Acompanhe com \"Listar com filtros\" trocando o customerId, ou pelo id retornado.",
+      "metaSortKey": -600
+    },
+    {
+      "_id": "req_provider_rejects",
+      "_type": "request",
+      "parentId": "fld_provider_failures",
+      "name": "Provedor rejeita: 400 → FAILED sem retry",
+      "description": "Em cerca de 1 segundo: status FAILED, attempts 1, failureReason \"Provedor rejeitou a ativação (HTTP 400)\".",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"EXT-{% uuid 'v4' %}\",\n  \"customerId\": \"CUST-FAILURES\",\n  \"productCode\": \"INVALID-PRODUCT\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -600
+    },
+    {
+      "_id": "req_provider_error",
+      "_type": "request",
+      "parentId": "fld_provider_failures",
+      "name": "Provedor com erro: 500 → retries com backoff → FAILED",
+      "description": "attempts sobe a cada tentativa (backoff 2s, 4s, 8s, 16s); após 5 tentativas, cerca de 30 segundos, o status vira FAILED.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"EXT-{% uuid 'v4' %}\",\n  \"customerId\": \"CUST-FAILURES\",\n  \"productCode\": \"BROKEN-PRODUCT\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -590
+    },
+    {
+      "_id": "req_provider_throttled",
+      "_type": "request",
+      "parentId": "fld_provider_failures",
+      "name": "Provedor limitando: 429 + Retry-After → retries espaçados",
+      "description": "O provedor responde 429 com Retry-After: 10. Cada nova tentativa espera pelo menos 10 segundos.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"EXT-{% uuid 'v4' %}\",\n  \"customerId\": \"CUST-FAILURES\",\n  \"productCode\": \"THROTTLED-PRODUCT\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -580
+    },
+    {
+      "_id": "req_provider_slow",
+      "_type": "request",
+      "parentId": "fld_provider_failures",
+      "name": "Provedor lento: timeout → retries com a mesma Idempotency-Key",
+      "description": "O provedor demora 8s e o timeout de leitura é 5s. failureReason \"Tempo de resposta do provedor esgotado\"; veja em \"Chamadas recebidas\" que todas as tentativas usam a mesma Idempotency-Key.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"EXT-{% uuid 'v4' %}\",\n  \"customerId\": \"CUST-FAILURES\",\n  \"productCode\": \"SLOW-PRODUCT\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -570
+    },
+    {
+      "_id": "req_failures_list",
+      "_type": "request",
+      "parentId": "fld_provider_failures",
+      "name": "Acompanhar as solicitações com falha",
+      "description": "Lista as solicitações criadas nesta pasta, com status, attempts e failureReason.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/api/v1/requests",
+      "parameters": [
+        { "name": "customerId", "value": "CUST-FAILURES" }
+      ],
+      "authentication": {
+        "type": "oauth2",
+        "grantType": "client_credentials",
+        "accessTokenUrl": "{{ _.tokenUrl }}",
+        "clientId": "source-system-a",
+        "clientSecret": "{{ _.clientSecret }}",
+        "credentialsInBody": true
+      },
+      "metaSortKey": -560
+    },
+
+    {
+      "_id": "fld_provider_mock",
+      "_type": "request_group",
+      "parentId": "wrk_product_activation",
+      "name": "5. Provedor simulado (WireMock)",
+      "metaSortKey": -500
+    },
+    {
+      "_id": "req_wiremock_requests",
+      "_type": "request",
+      "parentId": "fld_provider_mock",
+      "name": "Chamadas recebidas pelo provedor",
+      "description": "Mostra cada chamada com os headers Idempotency-Key, X-Correlation-Id e Authorization enviados pelo serviço.",
+      "method": "GET",
+      "url": "{{ _.providerUrl }}/__admin/requests",
+      "authentication": {},
+      "metaSortKey": -500
+    },
+    {
+      "_id": "req_wiremock_reset",
+      "_type": "request",
+      "parentId": "fld_provider_mock",
+      "name": "Limpar histórico de chamadas",
+      "method": "DELETE",
+      "url": "{{ _.providerUrl }}/__admin/requests",
+      "authentication": {},
+      "metaSortKey": -490
+    }
+  ]
+}
