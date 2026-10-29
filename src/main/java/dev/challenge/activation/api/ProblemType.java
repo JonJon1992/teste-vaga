@@ -5,6 +5,8 @@ import java.net.URI;
 enum ProblemType {
     VALIDATION_ERROR("validation-error", "Dados inválidos"),
     MALFORMED_REQUEST("malformed-request", "Requisição malformada"),
+    UNAUTHORIZED("unauthorized", "Não autenticado"),
+    FORBIDDEN("forbidden", "Acesso negado"),
     NOT_FOUND("not-found", "Recurso não encontrado"),
     EXTERNAL_ID_CONFLICT("external-id-conflict", "externalId já utilizado"),
     SERVICE_UNAVAILABLE("service-unavailable", "Serviço indisponível"),

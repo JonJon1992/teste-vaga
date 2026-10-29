@@ -18,12 +18,14 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
-import java.security.Principal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -37,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -45,9 +48,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ActivationRequestController.class)
+@Import(SecurityConfiguration.class)
 class ActivationRequestControllerTest {
 
-    private static final Principal CLIENT = () -> "system-a";
+    private static final RequestPostProcessor READER = client("system-a", SecurityConfiguration.READ_SCOPE);
+    private static final RequestPostProcessor WRITER = client("system-a", SecurityConfiguration.WRITE_SCOPE);
     private static final Instant CREATED_AT = Instant.parse("2026-10-26T14:03:11Z");
     private static final ActivationRequest REQUEST = ActivationRequest.register("system-a",
             new ActivationDetails("EXT-12345", "CUST-10001", "INTERNET-500"), null, CREATED_AT);
@@ -167,7 +172,7 @@ class ActivationRequestControllerTest {
         void returnsTheRequestWithItsCurrentStatus() throws Exception {
             when(queries.findById(REQUEST.getId(), "system-a")).thenReturn(REQUEST);
 
-            mockMvc.perform(get("/api/v1/requests/{id}", REQUEST.getId()).principal(CLIENT))
+            mockMvc.perform(get("/api/v1/requests/{id}", REQUEST.getId()).with(READER))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(REQUEST.getId().toString()))
                     .andExpect(jsonPath("$.status").value("PENDING"));
@@ -178,7 +183,7 @@ class ActivationRequestControllerTest {
             UUID unknownId = UUID.randomUUID();
             when(queries.findById(unknownId, "system-a")).thenThrow(new ActivationRequestNotFoundException(unknownId));
 
-            mockMvc.perform(get("/api/v1/requests/{id}", unknownId).principal(CLIENT))
+            mockMvc.perform(get("/api/v1/requests/{id}", unknownId).with(READER))
                     .andExpect(status().isNotFound())
                     .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.type").value("https://api.exemplo.com/problems/not-found"))
@@ -187,7 +192,7 @@ class ActivationRequestControllerTest {
 
         @Test
         void returns400WhenTheIdIsNotAUuid() throws Exception {
-            mockMvc.perform(get("/api/v1/requests/{id}", "not-a-uuid").principal(CLIENT))
+            mockMvc.perform(get("/api/v1/requests/{id}", "not-a-uuid").with(READER))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errors[0].field").value("id"));
         }
@@ -205,7 +210,7 @@ class ActivationRequestControllerTest {
                             .param("customerId", "CUST-10001")
                             .param("page", "1")
                             .param("size", "10")
-                            .principal(CLIENT))
+                            .with(READER))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content[0].id").value(REQUEST.getId().toString()))
                     .andExpect(jsonPath("$.page").value(1))
@@ -219,7 +224,7 @@ class ActivationRequestControllerTest {
 
         @Test
         void returns400WhenThePageSizeIsTooLarge() throws Exception {
-            mockMvc.perform(get("/api/v1/requests").param("size", "500").principal(CLIENT))
+            mockMvc.perform(get("/api/v1/requests").param("size", "500").with(READER))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errors[0].field").value("size"))
                     .andExpect(jsonPath("$.errors[0].message").value("deve ser no máximo 100"));
@@ -227,7 +232,7 @@ class ActivationRequestControllerTest {
 
         @Test
         void returns400ForAnUnknownStatus() throws Exception {
-            mockMvc.perform(get("/api/v1/requests").param("status", "DONE").principal(CLIENT))
+            mockMvc.perform(get("/api/v1/requests").param("status", "DONE").with(READER))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errors[0].field").value("status"));
         }
@@ -235,8 +240,12 @@ class ActivationRequestControllerTest {
 
     private static MockHttpServletRequestBuilder postRequest(String body) {
         return post("/api/v1/requests")
-                .principal(CLIENT)
+                .with(WRITER)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body);
+    }
+
+    private static RequestPostProcessor client(String clientId, String scope) {
+        return jwt().jwt(token -> token.subject(clientId)).authorities(new SimpleGrantedAuthority(scope));
     }
 }

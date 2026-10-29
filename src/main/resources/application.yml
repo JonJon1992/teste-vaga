@@ -13,6 +13,14 @@ spring:
       hibernate.jdbc.time_zone: UTC
   flyway:
     enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8090/default}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8090/default/jwks}
+          audiences: ${JWT_AUDIENCE:product-activation-service}
+          principal-claim-name: ${JWT_PRINCIPAL_CLAIM:sub}
   task:
     scheduling:
       pool:
