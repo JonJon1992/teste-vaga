@@ -13,8 +13,24 @@ spring:
       hibernate.jdbc.time_zone: UTC
   flyway:
     enabled: true
+  task:
+    scheduling:
+      pool:
+        size: 2
+      shutdown:
+        await-termination: true
+        await-termination-period: 30s
 
 activation:
+  processing:
+    enabled: ${PROCESSING_ENABLED:true}
+    poll-interval: ${PROCESSING_POLL_INTERVAL:1s}
+    recovery-interval: ${PROCESSING_RECOVERY_INTERVAL:30s}
+    batch-size: ${PROCESSING_BATCH_SIZE:10}
+    lease: ${PROCESSING_LEASE:30s}
+    max-attempts: ${PROCESSING_MAX_ATTEMPTS:5}
+    initial-backoff: ${PROCESSING_INITIAL_BACKOFF:2s}
+    max-backoff: ${PROCESSING_MAX_BACKOFF:5m}
   provider:
     base-url: ${PROVIDER_BASE_URL:http://localhost:8089}
     connect-timeout: ${PROVIDER_CONNECT_TIMEOUT:2s}
