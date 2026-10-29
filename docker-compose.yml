@@ -1,0 +1,67 @@
+name: product-activation
+
+services:
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      provider-mock:
+        condition: service_started
+      auth:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/activation
+      DB_USERNAME: activation
+      DB_PASSWORD: activation
+      PROVIDER_BASE_URL: http://provider-mock:8080
+      PROVIDER_API_KEY: local-provider-key
+      JWT_ISSUER_URI: http://localhost:8090/default
+      JWT_JWK_SET_URI: http://auth:8080/default/jwks
+      JWT_AUDIENCE: product-activation-service
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768m
+    stop_grace_period: 40s
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: activation
+      POSTGRES_USER: activation
+      POSTGRES_PASSWORD: activation
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U activation -d activation"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  provider-mock:
+    image: wiremock/wiremock:3.13.2
+    command: ["--port", "8080", "--disable-banner"]
+    ports:
+      - "8089:8080"
+    volumes:
+      - ./docker/wiremock/mappings:/home/wiremock/mappings:ro
+
+  auth:
+    image: ghcr.io/navikt/mock-oauth2-server:2.1.10
+    environment:
+      SERVER_PORT: 8080
+      JSON_CONFIG_PATH: /config/mock-oauth2.json
+    ports:
+      - "8090:8080"
+    volumes:
+      - ./docker/auth/mock-oauth2.json:/config/mock-oauth2.json:ro
+
+volumes:
+  postgres-data:

@@ -1,0 +1,63 @@
+{
+  "mappings": [
+    {
+      "priority": 10,
+      "request": {
+        "method": "POST",
+        "urlPath": "/provider/v1/activate"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "status": "ACTIVATED" },
+        "delayDistribution": { "type": "uniform", "lower": 100, "upper": 400 }
+      }
+    },
+    {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/provider/v1/activate",
+        "bodyPatterns": [{ "matchesJsonPath": { "expression": "$.productCode", "equalTo": "INVALID-PRODUCT" } }]
+      },
+      "response": {
+        "status": 400,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "error": "Produto inexistente" }
+      }
+    },
+    {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/provider/v1/activate",
+        "bodyPatterns": [{ "matchesJsonPath": { "expression": "$.productCode", "equalTo": "BROKEN-PRODUCT" } }]
+      },
+      "response": { "status": 500 }
+    },
+    {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/provider/v1/activate",
+        "bodyPatterns": [{ "matchesJsonPath": { "expression": "$.productCode", "equalTo": "THROTTLED-PRODUCT" } }]
+      },
+      "response": {
+        "status": 429,
+        "headers": { "Retry-After": "10" }
+      }
+    },
+    {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/provider/v1/activate",
+        "bodyPatterns": [{ "matchesJsonPath": { "expression": "$.productCode", "equalTo": "SLOW-PRODUCT" } }]
+      },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 8000
+      }
+    }
+  ]
+}

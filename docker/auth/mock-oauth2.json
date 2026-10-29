@@ -1,0 +1,38 @@
+{
+  "interactiveLogin": false,
+  "tokenCallbacks": [
+    {
+      "issuerId": "default",
+      "tokenExpiry": 3600,
+      "requestMappings": [
+        {
+          "requestParam": "client_id",
+          "match": "source-system-a",
+          "claims": {
+            "sub": "source-system-a",
+            "aud": ["product-activation-service"],
+            "scope": "activation:read activation:write"
+          }
+        },
+        {
+          "requestParam": "client_id",
+          "match": "source-system-b",
+          "claims": {
+            "sub": "source-system-b",
+            "aud": ["product-activation-service"],
+            "scope": "activation:read activation:write"
+          }
+        },
+        {
+          "requestParam": "client_id",
+          "match": "reporting-system",
+          "claims": {
+            "sub": "reporting-system",
+            "aud": ["product-activation-service"],
+            "scope": "activation:read"
+          }
+        }
+      ]
+    }
+  ]
+}
