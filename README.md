@@ -44,7 +44,7 @@ docker compose up --build
 
 | Serviço | Porta | Papel |
 |---|---|---|
-| `app` | 8080 | este serviço |
+| `app` | 8080 (API), 8081 (health e métricas) | este serviço |
 | `postgres` | 5432 | banco de dados |
 | `provider-mock` | 8089 | provedor externo simulado (WireMock) |
 | `auth` | 8090 | servidor OAuth 2.0 simulado ([mock-oauth2-server](https://github.com/navikt/mock-oauth2-server)) |
@@ -81,7 +81,8 @@ O provedor simulado responde `200` por padrão e simula falhas pelo `productCode
 | `THROTTLED-PRODUCT` | `429` + `Retry-After: 10` | `FAILED` após 5 tentativas espaçadas pelo `Retry-After` |
 | `SLOW-PRODUCT` | `200` após 8 s (timeout de leitura é 5 s) | `FAILED` após 5 timeouts, sempre com a mesma `Idempotency-Key` |
 
-Observabilidade local: `http://localhost:8080/actuator/health/readiness` e `http://localhost:8080/actuator/prometheus`.
+Observabilidade local (porta de gerenciamento): `http://localhost:8081/actuator/health/readiness` e
+`http://localhost:8081/actuator/prometheus`.
 
 ### Rodando só a aplicação
 
@@ -90,6 +91,7 @@ Observabilidade local: `http://localhost:8080/actuator/health/readiness` e `http
 
 | Variável | Padrão | Descrição |
 |---|---|---|
+| `SERVER_PORT`, `MANAGEMENT_PORT` | `8080`, `8081` | porta da API e porta interna de health e métricas |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | `jdbc:postgresql://localhost:5432/activation`, `activation`, `activation` | banco |
 | `JWT_ISSUER_URI` | `http://localhost:8090/default` | emissor esperado no `iss` |
 | `JWT_JWK_SET_URI` | `http://localhost:8090/default/jwks` | chaves públicas para validar a assinatura |
@@ -100,7 +102,7 @@ Observabilidade local: `http://localhost:8080/actuator/health/readiness` e `http
 | `PROVIDER_CONNECT_TIMEOUT`, `PROVIDER_READ_TIMEOUT` | `2s`, `5s` | timeouts do cliente HTTP |
 | `PROCESSING_ENABLED` | `true` | liga o worker nesta instância |
 | `PROCESSING_POLL_INTERVAL`, `PROCESSING_RECOVERY_INTERVAL` | `1s`, `30s` | frequência do worker e da reconciliação |
-| `PROCESSING_BATCH_SIZE`, `PROCESSING_LEASE` | `10`, `30s` | tamanho do lote e prazo da reserva |
+| `PROCESSING_BATCH_SIZE`, `PROCESSING_LEASE` | `10`, `30s` | tamanho do lote e prazo da reserva (o lease precisa ser maior que a soma dos timeouts do provedor, senão a aplicação não sobe) |
 | `PROCESSING_MAX_ATTEMPTS` | `5` | tentativas antes de `FAILED` |
 | `PROCESSING_INITIAL_BACKOFF`, `PROCESSING_MAX_BACKOFF` | `2s`, `5m` | backoff exponencial |
 | `API_MAX_REQUEST_BODY_SIZE` | `16KB` | tamanho máximo do corpo da requisição |
@@ -263,7 +265,9 @@ cair **durante** a chamada, a solicitação fica em `PROCESSING` com lease venci
 solicitação, igual em todas as tentativas, para o provedor reconhecer a repetição e não ativar duas vezes. O teste de
 integração verifica isso: timeout seguido de sucesso, com as duas chamadas usando a mesma chave.
 
-**Timeouts explícitos:** conexão 2 s e leitura 5 s, configuráveis. O cliente usa HTTP/1.1 explicitamente (a negociação
+**Timeouts explícitos:** conexão 2 s e leitura 5 s, configuráveis. O lease de 30 s precisa ser maior que a soma dos
+dois; se não for, a aplicação recusa subir, porque uma chamada lenta seria reprocessada enquanto ainda está em
+andamento. O cliente usa HTTP/1.1 explicitamente (a negociação
 h2c do `HttpClient` do JDK causava `RST_STREAM` em respostas sem corpo).
 
 **Limite de tentativas e backoff:** exponencial a partir de 2 s, com jitter (entre metade e o valor cheio), teto de
@@ -349,8 +353,10 @@ banco, que não revela volume nem permite adivinhar ids vizinhos.
 
 ### Observabilidade
 
-- **Health:** `/actuator/health/liveness` e `/actuator/health/readiness` (readiness inclui o banco), públicos para
-  o orquestrador.
+- **Porta de gerenciamento separada (8081):** health e métricas não passam pela porta da API (8080), que responde
+  `404` para `/actuator/**`. Em produção a 8081 não é exposta no ingress, só na rede interna.
+- **Health:** `/actuator/health/liveness` e `/actuator/health/readiness` (readiness inclui o banco), públicos na
+  porta de gerenciamento para o orquestrador.
 - **Métricas Prometheus** (`/actuator/prometheus`):
   - `http_server_requests`: latência da API por rota/status, com histograma para p95/p99;
   - `http_client_requests`: latência e taxa de erro do provedor, inclusive timeouts;
@@ -432,7 +438,7 @@ teste de carga e provedor simulado com 3 s de latência.
   código), usuário não-root, `MaxRAMPercentage=75` e encerramento em `OutOfMemoryError` para o orquestrador reiniciar.
   A imagem é gerada no CI e publicada em um registry com a tag do commit.
 - **Execução:** em Kubernetes (ou ECS/Cloud Run), com pelo menos 2 réplicas:
-  - probes de liveness e readiness nos endpoints do Actuator;
+  - probes de liveness e readiness nos endpoints do Actuator, na porta 8081;
   - `requests`/`limits` de CPU e memória;
   - `terminationGracePeriodSeconds` maior que os 30 s do desligamento gracioso.
 - **Configuração e segredos:** configuração por variáveis de ambiente (ConfigMap). Senha do banco e
@@ -442,8 +448,7 @@ teste de carga e provedor simulado com 3 s de latência.
   separado antes do deploy.
 - **Borda:** API gateway ou ingress com TLS, limite de tamanho do corpo e rate limit por `client_id`.
 - **Observabilidade:**
-  - Prometheus coleta `/actuator/prometheus`; o endpoint fica em porta de gerenciamento interna
-    (`management.server.port`), fora do ingress;
+  - Prometheus coleta `/actuator/prometheus` na porta de gerenciamento (8081), que não é exposta no ingress;
   - logs em JSON (`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`) vão para a plataforma central;
   - alertas em p95 da API, taxa de erro do provedor e backlog `PENDING`.
 - **Escala:** HPA por CPU ou latência. O pool de conexões é dimensionado considerando o número máximo de réplicas.
@@ -484,8 +489,6 @@ teste de carga e provedor simulado com 3 s de latência.
 | Tracing distribuído | Não implementado | `micrometer-tracing-bridge-otel` + exporter OTLP. O `traceId` do MDC passaria a ser o do W3C `traceparent`, propagado automaticamente pelo `RestClient`. |
 | Evento de conclusão | Não implementado | Outbox + publicação em tópico (seção anterior). |
 | Reprocessar `FAILED` | Não implementado | Endpoint administrativo (escopo próprio) que devolve a solicitação para `PENDING` zerando as tentativas, com auditoria. |
-| Porta de gerenciamento separada | Métricas públicas na mesma porta | `management.server.port` interno em produção; hoje `/actuator/prometheus` é liberado para facilitar o teste local. |
-| Validação cruzada da configuração | Documentada | Falhar o startup se `PROCESSING_LEASE` ≤ timeout de conexão + leitura. |
 
 ---
 

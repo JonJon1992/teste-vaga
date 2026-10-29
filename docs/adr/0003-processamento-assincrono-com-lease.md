@@ -33,7 +33,8 @@ chamada depois do commit, na mesma thread, perde a solicitação se a aplicaçã
   falhas e `@Version` protege a escrita final.
 - A entrega ao provedor é *at-least-once*: após timeout ou queda a mesma solicitação pode ser enviada de novo. A
   `Idempotency-Key` é o que evita ativação duplicada, e depende de o provedor suportá-la (premissa documentada).
-- O lease (30 s por padrão) precisa ser maior que timeout de conexão + leitura (2 s + 5 s).
+- O lease (30 s por padrão) precisa ser maior que timeout de conexão + leitura (2 s + 5 s). A configuração é
+  validada no startup: com um lease menor, a aplicação não sobe.
 - Polling a cada 1 s adiciona até ~1 s de atraso e uma consulta leve por instância (índice parcial).
 
 ## Alternativas consideradas

@@ -22,6 +22,7 @@ services:
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
     ports:
       - "8080:8080"
+      - "8081:8081"
     deploy:
       resources:
         limits:
