@@ -5,6 +5,3 @@ target/
 *.iml
 .vscode/
 
-# Enunciado do desafio e anotações pessoais (não fazem parte da solução)
-/Desafio*.html
-/docs/preparacao-entrevista-tecnica.md
