@@ -9,6 +9,8 @@ enum ProblemType {
     FORBIDDEN("forbidden", "Acesso negado"),
     NOT_FOUND("not-found", "Recurso não encontrado"),
     EXTERNAL_ID_CONFLICT("external-id-conflict", "externalId já utilizado"),
+    PAYLOAD_TOO_LARGE("payload-too-large", "Requisição muito grande"),
+    TOO_MANY_REQUESTS("too-many-requests", "Limite de requisições excedido"),
     SERVICE_UNAVAILABLE("service-unavailable", "Serviço indisponível"),
     INTERNAL_ERROR("internal-error", "Erro interno");
 

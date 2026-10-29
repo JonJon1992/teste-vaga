@@ -103,6 +103,8 @@ Observabilidade local: `http://localhost:8080/actuator/health/readiness` e `http
 | `PROCESSING_BATCH_SIZE`, `PROCESSING_LEASE` | `10`, `30s` | tamanho do lote e prazo da reserva |
 | `PROCESSING_MAX_ATTEMPTS` | `5` | tentativas antes de `FAILED` |
 | `PROCESSING_INITIAL_BACKOFF`, `PROCESSING_MAX_BACKOFF` | `2s`, `5m` | backoff exponencial |
+| `API_MAX_REQUEST_BODY_SIZE` | `16KB` | tamanho máximo do corpo da requisição |
+| `API_RATE_LIMIT_PER_MINUTE` | `120` | requisições por minuto por consumidor, em cada instância |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | vazio (texto) | `ecs` para logs JSON (usado no compose) |
 
 ---
@@ -111,9 +113,9 @@ Observabilidade local: `http://localhost:8080/actuator/health/readiness` e `http
 
 | Método | Rota | Escopo | Respostas |
 |---|---|---|---|
-| `POST` | `/api/v1/requests` | `activation:write` | `201` + `Location`, `200` (retry), `400`, `401`, `403`, `409` |
-| `GET` | `/api/v1/requests/{id}` | `activation:read` | `200`, `400` (id inválido), `401`, `403`, `404` |
-| `GET` | `/api/v1/requests?status=&customerId=&page=&size=` | `activation:read` | `200`, `400`, `401`, `403` |
+| `POST` | `/api/v1/requests` | `activation:write` | `201` + `Location`, `200` (retry), `400`, `401`, `403`, `409`, `413`, `429` |
+| `GET` | `/api/v1/requests/{id}` | `activation:read` | `200`, `400` (id inválido), `401`, `403`, `404`, `429` |
+| `GET` | `/api/v1/requests?status=&customerId=&page=&size=` | `activation:read` | `200`, `400`, `401`, `403`, `429` |
 
 ```json
 // POST /api/v1/requests
@@ -162,6 +164,8 @@ Observabilidade local: `http://localhost:8080/actuator/health/readiness` e `http
 | Escopo insuficiente | 403 | `forbidden` |
 | Solicitação inexistente (ou de outro consumidor) | 404 | `not-found` |
 | `externalId` reutilizado com dados diferentes | 409 | `external-id-conflict` |
+| Corpo acima de 16 KB | 413 | `payload-too-large` |
+| Consumidor acima do limite de requisições (com header `Retry-After`) | 429 | `too-many-requests` |
 | Banco indisponível | 503 | `service-unavailable` |
 | Erro inesperado (sem mensagem nem stack trace) | 500 | `internal-error` |
 
@@ -301,7 +305,19 @@ correlacionados pelo `traceId`. O teste `returns500WithoutLeakingInternalDetails
   Vault) injetado no container. A rotação sem indisponibilidade usa duas chaves válidas em sobreposição.
 - **Testes:** `401` sem token e com token inválido, `403` por escopo, isolamento entre consumidores e mapeamento da
   claim `scope`, tudo sem servidor de autenticação real.
-- **Limite de corpo e de taxa:** no API gateway (ver [Pontos pendentes](#pontos-pendentes)).
+- **Limite de tamanho do corpo:** o `RequestBodyLimitFilter` roda antes da autenticação e responde `413`.
+  - Com `Content-Length` acima do limite, a requisição é recusada sem ler o corpo.
+  - Sem `Content-Length` (chunked), a leitura é interrompida assim que o limite é ultrapassado. Assim um cliente não
+    consegue mandar um corpo enorme só por omitir o header.
+- **Limite de taxa por consumidor:** o `ClientRateLimitInterceptor` usa um token bucket (Bucket4j) por `sub` do token
+  e responde `429` com `Retry-After`.
+  - Roda depois da autenticação, então o limite é por sistema e não por IP.
+  - Um consumidor ruidoso não afeta os outros.
+  - O contador é **por instância**: com N réplicas, o limite efetivo é N × o configurado.
+  - Para um limite global exato, o mesmo Bucket4j usa um backend compartilhado (Redis, via `bucket4j-redis`), ou o
+    controle sobe para o API gateway.
+
+  Na borda, o gateway continua sendo a primeira barreira: protege também contra tráfego não autenticado.
 
 [ADR 0004](docs/adr/0004-seguranca-resource-server-jwt.md).
 
@@ -353,7 +369,7 @@ banco, que não revela volume nem permite adivinhar ids vizinhos.
 |---|---|---|---|
 | Domínio (unitário, sem Spring) | `ActivationRequestTest`, `ActivationStatusTest`, `RetryPolicyTest`, `UuidV7Test` | transições válidas e inválidas, limite de tentativas, backoff e jitter, formato e ordenação dos ids | regras de negócio puras: rápidas e determinísticas (`Clock` e aleatoriedade injetados) |
 | Aplicação (unitário, Mockito) | `CreateActivationRequestUseCaseTest`, `ActivationRequestQueriesTest`, `ActivationDispatcherTest` | idempotência da criação, corrida simulada, isolamento, orquestração do worker | lógica de coordenação sem depender de banco ou HTTP |
-| Web (`@WebMvcTest`) | `ActivationRequestControllerTest`, `ApiSecurityTest` | contrato HTTP, validação, Problem Details, 401/403 | serialização, status e segurança exigem o MVC real, mas não o banco |
+| Web (`@WebMvcTest`) | `ActivationRequestControllerTest`, `ApiSecurityTest`, `RequestLimitsTest` | contrato HTTP, validação, Problem Details, 401/403, 413 e 429 | serialização, status e segurança exigem o MVC real, mas não o banco |
 | Persistência (Testcontainers) | `JpaActivationRequestRepositoryTest` | constraint única, `@Version`, filtros, `SKIP LOCKED` entre transações | comportamento de banco não se simula com H2 ou mock |
 | Cliente HTTP (WireMock) | `HttpActivationProviderTest`, `RetryAfterHeaderTest` | mapeamento de cada retorno, headers enviados, timeout real | timeouts e falhas de conexão precisam de um servidor de verdade |
 | Integração ponta a ponta | `ActivationFlowIntegrationTest`, `ActivationApplicationTests` | 10 POSTs simultâneos → 1 registro; fluxo até `COMPLETED`/`FAILED`; retry após 503 e timeout; probes e métricas | o que só aparece com tudo junto: transações reais, worker agendado, concorrência |
@@ -463,7 +479,7 @@ teste de carga e provedor simulado com 3 s de latência.
 
 | Item | Situação | Como faria |
 |---|---|---|
-| Limite de corpo e rate limit | Não implementado no serviço | No API gateway (limite por `client_id` e tamanho máximo do corpo). Se precisasse estar no serviço: Bucket4j por `client_id` e filtro rejeitando corpo acima de ~16 KB com `413`. |
+| Rate limit distribuído | Implementado por instância | Backend compartilhado no Bucket4j (`bucket4j-redis` com Lettuce) para um limite exato entre réplicas. Com Redis indisponível, deixaria a requisição passar (*fail-open*) e registraria métrica e alerta, para não derrubar a API por um componente auxiliar. |
 | Circuit breaker | Não implementado | Resilience4j em volta do `HttpActivationProvider`; com o circuito aberto, devolve a solicitação para `PENDING` sem chamar o provedor. |
 | Tracing distribuído | Não implementado | `micrometer-tracing-bridge-otel` + exporter OTLP. O `traceId` do MDC passaria a ser o do W3C `traceparent`, propagado automaticamente pelo `RestClient`. |
 | Evento de conclusão | Não implementado | Outbox + publicação em tópico (seção anterior). |

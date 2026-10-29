@@ -36,4 +36,5 @@ Client Credentials com tokens de curta duração.
 
 - Nenhum segredo de autenticação fica no serviço: só chaves públicas.
 - Testes de 401/403 e de isolamento rodam sem servidor de autenticação (`spring-security-test` + `JwtDecoder` simulado).
-- Limite de tamanho do corpo e de taxa de chamadas ficam no API gateway (ver README).
+- O serviço limita o tamanho do corpo (`413`) e a taxa por consumidor autenticado (`429` + `Retry-After`, token
+  bucket por instância). O API gateway continua sendo a primeira barreira, inclusive para tráfego não autenticado.

@@ -1,9 +1,13 @@
 package dev.challenge.activation.api;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 
+import java.io.IOException;
 import java.net.URI;
 
 final class Problems {
@@ -26,5 +30,12 @@ final class Problems {
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("traceId", CorrelationIdFilter.current());
         return problem;
+    }
+
+    static void write(HttpServletResponse response, ProblemDetail problem, ObjectMapper objectMapper)
+            throws IOException {
+        response.setStatus(problem.getStatus());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        objectMapper.writeValue(response.getOutputStream(), problem);
     }
 }

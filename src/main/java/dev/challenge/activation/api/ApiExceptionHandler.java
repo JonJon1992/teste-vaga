@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.http.HttpHeaders;
@@ -41,6 +42,14 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ExternalIdConflictException.class)
     ProblemDetail handleConflict(ExternalIdConflictException exception, HttpServletRequest request) {
         return Problems.of(HttpStatus.CONFLICT, ProblemType.EXTERNAL_ID_CONFLICT, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ProblemDetail> handleRateLimit(RateLimitExceededException exception, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(exception.retryAfter().toSeconds()))
+                .body(Problems.of(HttpStatus.TOO_MANY_REQUESTS, ProblemType.TOO_MANY_REQUESTS,
+                        exception.getMessage(), request));
     }
 
     @ExceptionHandler({CannotCreateTransactionException.class, DataAccessResourceFailureException.class,
@@ -93,6 +102,11 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException exception,
                                                                   HttpHeaders headers, HttpStatusCode status,
                                                                   WebRequest request) {
+        if (NestedExceptionUtils.getMostSpecificCause(exception) instanceof RequestBodyTooLargeException tooLarge) {
+            ProblemDetail problem = Problems.of(HttpStatus.PAYLOAD_TOO_LARGE, ProblemType.PAYLOAD_TOO_LARGE,
+                    tooLarge.getMessage());
+            return handleExceptionInternal(exception, problem, headers, HttpStatus.PAYLOAD_TOO_LARGE, request);
+        }
         ProblemDetail problem = Problems.of(HttpStatus.BAD_REQUEST, ProblemType.MALFORMED_REQUEST,
                 "O corpo da requisição está ausente ou não é um JSON válido.");
         return handleExceptionInternal(exception, problem, headers, HttpStatus.BAD_REQUEST, request);

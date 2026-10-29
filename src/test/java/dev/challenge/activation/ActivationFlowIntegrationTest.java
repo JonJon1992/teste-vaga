@@ -49,7 +49,8 @@ import static org.mockito.Mockito.when;
         "activation.processing.poll-interval=100ms",
         "activation.processing.initial-backoff=100ms",
         "activation.processing.max-backoff=200ms",
-        "activation.provider.read-timeout=500ms"
+        "activation.provider.read-timeout=500ms",
+        "activation.api.rate-limit.requests-per-minute=100000"
 })
 @Import(TestcontainersConfiguration.class)
 class ActivationFlowIntegrationTest {

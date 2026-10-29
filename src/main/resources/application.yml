@@ -60,6 +60,10 @@ logging:
     org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF
 
 activation:
+  api:
+    max-request-body-size: ${API_MAX_REQUEST_BODY_SIZE:16KB}
+    rate-limit:
+      requests-per-minute: ${API_RATE_LIMIT_PER_MINUTE:120}
   processing:
     enabled: ${PROCESSING_ENABLED:true}
     poll-interval: ${PROCESSING_POLL_INTERVAL:1s}
