@@ -13,3 +13,10 @@ spring:
       hibernate.jdbc.time_zone: UTC
   flyway:
     enabled: true
+
+activation:
+  provider:
+    base-url: ${PROVIDER_BASE_URL:http://localhost:8089}
+    connect-timeout: ${PROVIDER_CONNECT_TIMEOUT:2s}
+    read-timeout: ${PROVIDER_READ_TIMEOUT:5s}
+    api-key: ${PROVIDER_API_KEY:}
